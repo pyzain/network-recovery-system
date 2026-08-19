@@ -1,0 +1,11 @@
+# Network Recovery System — Python dependencies
+# Install with:  pip install -r requirements.txt
+
+# ── Runtime GUI dependency ────────────────────────────────────────────────────
+customtkinter>=5.2.0          # Modern dark-theme GUI framework
+
+# ── Needed only if you plan to compile your own .exe ──────────────────────────
+pyinstaller>=6.0
+
+# For the full build command (with all flags explained), see the
+# "Building the .exe Yourself" section in README.md.
