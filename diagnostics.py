@@ -1,5 +1,5 @@
 """
-diagnostics.py — Six core network diagnostic tests.
+diagnostics.py — Core network diagnostic tests (loopback, gateway, internet, DNS).
 
 All targets (gateway, DNS, public IP) are discovered dynamically.
 No hardcoded network values except the public probe IP in config.py.
@@ -309,8 +309,8 @@ def test_dns() -> tuple[bool, float]:
 
 def run_all_diagnostics() -> DiagnosticReport:
     """
-    Run all six tests in sequence and return a fully populated DiagnosticReport.
-    Short-circuits intelligently to avoid hammering failed infrastructure.
+    Run the tests in sequence and return a populated DiagnosticReport.
+    Stops early if loopback fails, since nothing else can work then.
     """
     report = DiagnosticReport()
 

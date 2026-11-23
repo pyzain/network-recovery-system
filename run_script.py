@@ -177,7 +177,7 @@ class RadarWidget(tk.Canvas):
         self._draw()
 
     def cancel(self) -> None:
-        """Explicitly pulls down scheduled animation frames."""
+        """Cancel the scheduled animation frame, if any."""
         if self._after_id:
             try:
                 self.after_cancel(self._after_id)
@@ -336,7 +336,7 @@ class App(ctk.CTk):
         self.debug = debug
         set_debug(debug)
 
-        # Timer safe-handling registry
+        # after() ids, so they can be cancelled on close
         self._after_ids = {}
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -357,18 +357,18 @@ class App(ctk.CTk):
         # Internal state
         self._blink_on = True
 
-        # Build and safely execute
+        # Build the window, then start timers once it's laid out
         self._build_ui()
         self.after_idle(self._start_timers)
 
     def _start_timers(self) -> None:
-        """Kicks off the event scheduling loop safely once layout engine settles."""
+        """Start the cursor blink, the UI queue poll and the analysis."""
         self._blink()
         self._poll_ui_queue()
         self._after_ids["analysis"] = self.after(480, self._run_analysis)
 
     def _poll_ui_queue(self) -> None:
-        """Safely processes background UI updates in the main thread event loop."""
+        """Run UI updates queued by the worker thread, on the main thread."""
         if not self.winfo_exists():
             return
         try:
@@ -394,7 +394,7 @@ class App(ctk.CTk):
                 self._after_ids["poll"] = self.after(30, self._poll_ui_queue)
 
     def _on_close(self) -> None:
-        """Intercepts window termination to clean up outstanding Tcl callbacks."""
+        """Cancel pending after() callbacks before closing the window."""
         self._closing = True
         if hasattr(self, "radar"):
             self.radar.cancel()
