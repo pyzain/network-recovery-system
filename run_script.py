@@ -1,7 +1,7 @@
 """
 run_script.py — Company Intelligent Network Recovery System
-Graphical entry point with cybersecurity theme.
-Only this file is changed; all backend modules remain completely untouched.
+Graphical entry point: runs diagnostics, classification and remediation on a
+background thread and shows progress in a radar-style window.
 
 Build (admin-elevated, UPX disabled to avoid AV false positives):
     pyinstaller --onefile --noconsole --uac-admin --name Company_Network_Brain ^
@@ -73,9 +73,7 @@ if _DEBUG_MODE:
         pass
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  THEME PALETTE
-# ─────────────────────────────────────────────────────────────────────────────
+# ---- THEME PALETTE ----
 
 BG        = "#070d19"       # near-black navy
 BG_PANEL  = "#0b1428"       # slightly lighter header/panels
@@ -126,14 +124,12 @@ def _blend(a: str, b: str, t: float) -> str:
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  RADAR ANIMATION WIDGET
-# ─────────────────────────────────────────────────────────────────────────────
+# ---- RADAR ANIMATION WIDGET ----
 
 class RadarWidget(tk.Canvas):
     """
     Self-animating radar canvas.
-    Anamates ONLY while scanning to preserve cycle efficiency and lifecycle sanity.
+    Animates only while a scan is running.
     """
 
     SZ = 224       # canvas side
@@ -165,7 +161,7 @@ class RadarWidget(tk.Canvas):
 
         self._draw()   # Perform initial static render
 
-    # ── Public API ────────────────────────────────────────────────────────────
+    # Public API
 
     def start_scan(self) -> None:
         self.cancel()
@@ -189,7 +185,7 @@ class RadarWidget(tk.Canvas):
                 pass
             self._after_id = None
 
-    # ── Internal drawing ──────────────────────────────────────────────────────
+    # Internal drawing
 
     def _add_blip(self) -> None:
         a    = random.uniform(0, 2 * math.pi)
@@ -230,7 +226,7 @@ class RadarWidget(tk.Canvas):
         self.create_oval(cx - r, cy - r, cx + r, cy + r, outline=accent, width=ring_w)
 
         if self._mode == "scan":
-            # ── Sweep fan trail ──────────────────────────────────────────
+            # Sweep fan trail
             for idx, color in enumerate(_SWEEP_COLORS):
                 a = math.radians(self._angle - idx * 1.4)
                 xe = cx + r * math.cos(a)
@@ -287,9 +283,7 @@ class RadarWidget(tk.Canvas):
                 self._after_id = self.after(30, self._frame)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  SEGMENTED PROGRESS BAR  (pure tkinter canvas)
-# ─────────────────────────────────────────────────────────────────────────────
+# ---- SEGMENTED PROGRESS BAR  (pure tkinter canvas) ----
 
 class ProgressBar(tk.Canvas):
     def __init__(self, parent: tk.Widget, width: int = 440, height: int = 20):
@@ -322,9 +316,7 @@ class ProgressBar(tk.Canvas):
         self.create_rectangle(0, 0, w - 1, h - 1, outline=MUTED2, width=1)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  MAIN APPLICATION WINDOW
-# ─────────────────────────────────────────────────────────────────────────────
+# ---- MAIN APPLICATION WINDOW ----
 
 class App(ctk.CTk):
 
@@ -352,7 +344,7 @@ class App(ctk.CTk):
         self._ui_queue = queue.Queue()
         self._closing = False
 
-        # ── Window chrome ─────────────────────────────────────────────────
+        # Window chrome
         H = self._H_DEBUG if debug else self._H_NORM
         self.title("Network Recovery System")
         self.configure(fg_color=BG)
@@ -362,10 +354,10 @@ class App(ctk.CTk):
         sy = self.winfo_screenheight()
         self.geometry(f"{self._W}x{H}+{(sx - self._W)//2}+{(sy - H)//2}")
 
-        # ── Internal state ────────────────────────────────────────────────
+        # Internal state
         self._blink_on = True
 
-        # ── Build and safely execute ──────────────────────────────────────
+        # Build and safely execute
         self._build_ui()
         self.after_idle(self._start_timers)
 
@@ -420,12 +412,10 @@ class App(ctk.CTk):
         self.destroy()
 
 
-    # ─────────────────────────────────────────────────────────────────────────
-    #  UI CONSTRUCTION
-    # ─────────────────────────────────────────────────────────────────────────
+    # ---- UI CONSTRUCTION ----
 
     def _build_ui(self) -> None:
-        # ── Header bar ────────────────────────────────────────────────────
+        # Header bar
         hdr = tk.Frame(self, bg=BG_PANEL, height=68)
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
@@ -457,11 +447,11 @@ class App(ctk.CTk):
         # Single-pixel divider under header
         tk.Frame(self, bg=MUTED, height=1).pack(fill="x")
 
-        # ── Body ──────────────────────────────────────────────────────────
+        # Body
         body = tk.Frame(self, bg=BG)
         body.pack(fill="both", expand=True, padx=26, pady=20)
 
-        # ── Top row: radar  |  status panel ──────────────────────────────
+        # Top row: radar  |  status panel
         top_row = tk.Frame(body, bg=BG)
         top_row.pack(fill="x")
 
@@ -508,7 +498,7 @@ class App(ctk.CTk):
         self._prog_pct = tk.Label(sp, text="0 %", font=(MONO, 8, "bold"), fg=CYAN, bg=BG)
         self._prog_pct.pack(anchor="e")
 
-        # ── Divider + action log ──────────────────────────────────────────
+        # Divider + action log
         tk.Frame(body, bg=MUTED, height=1).pack(fill="x", pady=(18, 0))
 
         log_hdr = tk.Frame(body, bg=BG)
@@ -536,7 +526,7 @@ class App(ctk.CTk):
         ]:
             self._log.tag_config(tag, foreground=col)
 
-        # ── Result card (packed dynamically when analysis completes) ──────
+        # Result card (packed dynamically when analysis completes)
         self._res_card = tk.Frame(body, bg=BG_CARD)
 
         top_stripe = tk.Frame(self._res_card, bg=MUTED, height=1)
@@ -563,7 +553,7 @@ class App(ctk.CTk):
 
         self._res_msg.pack(anchor="w")
 
-        # ── Debug panel (only constructed in debug mode) ──────────────────
+        # Debug panel (only constructed in debug mode)
         if self.debug:
             tk.Frame(body, bg=MUTED, height=1).pack(fill="x", pady=(16, 0))
             tk.Label(
@@ -595,9 +585,7 @@ class App(ctk.CTk):
             ]:
                 self._dbtext.tag_config(tag, foreground=col)
 
-    # ─────────────────────────────────────────────────────────────────────────
-    #  UI HELPERS (all must be called from the main thread)
-    # ─────────────────────────────────────────────────────────────────────────
+    # ---- UI HELPERS (all must be called from the main thread) ----
 
     def _upd_phase(self, phase: str, status: str = "") -> None:
         self._phase_var.set(phase)
@@ -640,9 +628,7 @@ class App(ctk.CTk):
         if self.winfo_exists():
             self._after_ids["blink"] = self.after(520, self._blink)
 
-    # ─────────────────────────────────────────────────────────────────────────
-    #  BACKGROUND ANALYSIS
-    # ─────────────────────────────────────────────────────────────────────────
+    # ---- BACKGROUND ANALYSIS ----
 
     def _run_analysis(self) -> None:
         self.radar.start_scan()
@@ -655,17 +641,13 @@ class App(ctk.CTk):
         All GUI updates are dispatched to the main thread via self._ui_queue.
         """
         def ui(fn):
-            if self._closing:
-                return
-
-            if self.winfo_exists():
-                try:
-                    self._ui_queue.put(fn)
-                except Exception:
-                    pass
+            # queue.put is thread-safe; the main thread drains it in
+            # _poll_ui_queue. No Tk call may happen on this thread.
+            if not self._closing:
+                self._ui_queue.put(fn)
 
         try:
-            # ── Phase 1: Diagnostics ─────────────────────────────────────
+            # Phase 1: Diagnostics
             ui(lambda: self._upd_phase("SCANNING", "Running network diagnostic suite…"))
             ui(lambda: self._log_line("Starting full network diagnostic suite", "info"))
             ui(lambda: self._upd_prog(0.08))
@@ -718,7 +700,7 @@ class App(ctk.CTk):
                 "ok" if report.dns_ok else "fail",
             ))
 
-            # ── Phase 2: Wi-Fi ───────────────────────────────────────────
+            # Phase 2: Wi-Fi
             ui(lambda: self._upd_phase("SCANNING", "Analyzing wireless interface…"))
             ui(lambda: self._upd_prog(0.56))
 
@@ -735,7 +717,7 @@ class App(ctk.CTk):
             else:
                 ui(lambda: self._log_line("No Wi-Fi interface (Ethernet or N/A)", "dim"))
 
-            # ── Phase 3: Classification ──────────────────────────────────
+            # Phase 3: Classification
             ui(lambda: self._upd_phase("CLASSIFYING", "Identifying fault pattern…"))
             ui(lambda: self._upd_prog(0.70))
 
@@ -750,7 +732,7 @@ class App(ctk.CTk):
                 sev_to_tag.get(cls.severity, "dim"),
             ))
 
-            # ── Phase 4: Remediation ─────────────────────────────────────
+            # Phase 4: Remediation
             ui(lambda: self._upd_phase("REMEDIATING", "Applying optimizations and fixes…"))
             ui(lambda: self._upd_prog(0.82))
 
@@ -767,7 +749,6 @@ class App(ctk.CTk):
 
             ui(lambda: self._upd_prog(1.0))
 
-            # Clear time.sleep placeholder safely away from any after loops
             if self._closing:
                 return
 
@@ -778,13 +759,13 @@ class App(ctk.CTk):
             ui(lambda: self._show_results(report, wifi, cls, result))
 
         except Exception as exc:
-            ui(lambda: self._upd_phase("ERROR", f"Unexpected error: {exc}"))
-            ui(lambda: self._log_line(f"Fatal error: {exc}", "fail"))
+            err = str(exc)
+            debug_log("WORKER ERROR:\n" + traceback.format_exc())
+            ui(lambda: self._upd_phase("ERROR", f"Unexpected error: {err}"))
+            ui(lambda: self._log_line(f"Fatal error: {err}", "fail"))
             ui(lambda: self.radar.finish_scan(success=False))
 
-    # ─────────────────────────────────────────────────────────────────────────
-    #  RESULTS DISPLAY
-    # ─────────────────────────────────────────────────────────────────────────
+    # ---- RESULTS DISPLAY ----
 
     def _show_results(self, report, wifi, cls, result) -> None:
         # Finalise animated elements
@@ -805,23 +786,21 @@ class App(ctk.CTk):
                 self._res_card,
                 text="⚠  Please save your work and restart your computer.",
                 font=(MONO, 8, "bold"), fg=AMBER, bg=BG_CARD,
-                padx=18, pady=(0, 10),
+                padx=18,
             )
-            reboot_note.pack(anchor="w")
+            reboot_note.pack(anchor="w", pady=(0, 10))
 
         # Populate debug dump if applicable
         if self.debug:
             self._populate_debug(report, wifi, cls, result)
 
-    # ─────────────────────────────────────────────────────────────────────────
-    #  DEBUG DUMP
-    # ─────────────────────────────────────────────────────────────────────────
+    # ---- DEBUG DUMP ----
 
     def _populate_debug(self, report, wifi, cls, result) -> None:
         L = self._db_line
         HR = "─" * 62
 
-        # ── Adapter ──────────────────────────────────────────────────────
+        # Adapter
         L(HR, "dm");  L("  ADAPTER INFORMATION", "cy");  L(HR, "dm")
         if report.adapter:
             a = report.adapter
@@ -836,7 +815,7 @@ class App(ctk.CTk):
         else:
             L("  No active adapter found.", "rd")
 
-        # ── Wi-Fi ─────────────────────────────────────────────────────────
+        # Wi-Fi
         if wifi:
             L()
             L(HR, "dm");  L("  WI-FI DETAILS", "cy");  L(HR, "dm")
@@ -849,7 +828,7 @@ class App(ctk.CTk):
             L(f"  Tx / Rx     : {wifi.transmit_rate_mbps} / {wifi.receive_rate_mbps} Mbps",
               "am" if wifi.is_slow_link else "")
 
-        # ── Diagnostics ───────────────────────────────────────────────────
+        # Diagnostics
         L()
         L(HR, "dm");  L("  DIAGNOSTIC RESULTS", "cy");  L(HR, "dm")
         L(f"  Loopback         : {'✓ PASS' if report.loopback_ok else '✗ FAIL'}",
@@ -880,7 +859,7 @@ class App(ctk.CTk):
         L(f"  Latency high     : {'Yes ⚠' if report.latency_high else 'No'}",
           "am" if report.latency_high else "")
 
-        # ── Classification ────────────────────────────────────────────────
+        # Classification
         L()
         L(HR, "dm");  L("  CLASSIFICATION", "cy");  L(HR, "dm")
         s_map = {"healthy": "gr", "advisory": "cy", "degraded": "am", "critical": "rd"}
@@ -888,7 +867,7 @@ class App(ctk.CTk):
         L(f"  Severity    : {cls.severity.upper()}", s_map.get(cls.severity, ""))
         L(f"  Description : {cls.description}")
 
-        # ── Remediation ───────────────────────────────────────────────────
+        # Remediation
         L()
         L(HR, "dm");  L("  REMEDIATION ACTIONS", "cy");  L(HR, "dm")
         for action in result.actions_attempted:
@@ -903,9 +882,7 @@ class App(ctk.CTk):
           "am" if result.reboot_recommended else "gr")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  ENTRY POINT
-# ─────────────────────────────────────────────────────────────────────────────
+# ---- ENTRY POINT ----
 
 def main() -> int:
     debug_log("===== APP START =====")

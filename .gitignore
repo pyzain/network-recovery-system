@@ -1,24 +1,24 @@
-# ── PyInstaller build output ──────────────────────────────────────────────
+# PyInstaller output
 build/
 dist/
 *.spec
 
-# ── Python cache ──────────────────────────────────────────────────────────
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
 
-# ── Runtime logs the app creates when run with --debug ────────────────────
+# Logs written in --debug mode
 debug_crash_log.txt
 faulthandler.log
 
-# ── Personal / developer-only files (never pushed to GitHub) ──────────────
+# Local build helpers
 manifest.xml
 buildexe.txt
 Debug_Command.txt
 BUILD_INSTRUCTIONS.md
 
-# ── OS / editor junk ────────────────────────────────────────────────────
+# Editor / OS files
 .vscode/
 .idea/
 Thumbs.db

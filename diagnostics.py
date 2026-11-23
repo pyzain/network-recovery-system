@@ -21,8 +21,11 @@ from config import (
     APIPA_PREFIX,
 )
 
+# Strict IPv4 match, so an IPv6 value like "2001:db8::1" is never read as "2001".
+_IPV4 = r"(\d{1,3}(?:\.\d{1,3}){3})(?![\d.:])"
 
-# ── Data structures ───────────────────────────────────────────────────────────
+
+# Data structures
 
 @dataclass
 class PingResult:
@@ -75,7 +78,7 @@ class DiagnosticReport:
     no_gateway: bool                = False
 
 
-# ── ipconfig parser ───────────────────────────────────────────────────────────
+# ipconfig parser
 
 def _parse_ipconfig() -> list[AdapterInfo]:
     """
@@ -89,6 +92,7 @@ def _parse_ipconfig() -> list[AdapterInfo]:
     adapters: list[AdapterInfo] = []
     current: Optional[AdapterInfo] = None
     media_hint = ""
+    last_field = ""   # which multi-value field a continuation line belongs to
 
     for line in stdout.splitlines():
         # New adapter section
@@ -97,6 +101,7 @@ def _parse_ipconfig() -> list[AdapterInfo]:
             if current and current.ip_address:
                 adapters.append(current)
             current = AdapterInfo()
+            last_field = ""
             header_text = adapter_header.group(1).lower()
             if "wi-fi" in header_text or "wireless" in header_text:
                 media_hint = "Wi-Fi"
@@ -115,27 +120,40 @@ def _parse_ipconfig() -> list[AdapterInfo]:
             m = re.search(pattern, line, re.IGNORECASE)
             return m.group(1).strip() if m else ""
 
-        ip = _val(r"IPv4 Address[^:]*:\s*([\d.]+)")
+        # Continuation lines carry extra values for the previous field, e.g.
+        # an IPv4 gateway listed under an IPv6 one, or a second DNS server.
+        cont = re.match(rf"^\s{{20,}}{_IPV4}\s*$", line)
+        if cont:
+            value = cont.group(1)
+            if last_field == "gateway" and not current.gateway:
+                current.gateway = value
+            elif last_field == "dns" and value not in current.dns_servers:
+                current.dns_servers.append(value)
+            continue
+
+        if re.match(r"^\s{1,6}\S", line):
+            lowered = line.lower()
+            if "default gateway" in lowered:
+                last_field = "gateway"
+            elif "dns servers" in lowered:
+                last_field = "dns"
+            else:
+                last_field = ""
+
+        ip = _val(rf"IPv4 Address[^:]*:\s*{_IPV4}")
         if ip:
             current.ip_address = ip
             current.is_apipa   = ip.startswith(APIPA_PREFIX)
 
-        gw = _val(r"Default Gateway[^:]*:\s*([\d.]+)")
+        gw = _val(rf"Default Gateway[^:]*:\s*{_IPV4}")
         if gw:
             current.gateway = gw
 
-        dns = _val(r"DNS Servers[^:]*:\s*([\d.]+)")
+        dns = _val(rf"DNS Servers[^:]*:\s*{_IPV4}")
         if dns and dns not in current.dns_servers:
             current.dns_servers.append(dns)
 
-        # Additional DNS lines (indented continuation)
-        extra_dns = re.match(r"^\s{29}([\d.]+)\s*$", line)
-        if extra_dns and current.dns_servers:
-            dns2 = extra_dns.group(1)
-            if dns2 not in current.dns_servers:
-                current.dns_servers.append(dns2)
-
-        dhcp = _val(r"DHCP Server[^:]*:\s*([\d.]+)")
+        dhcp = _val(rf"DHCP Server[^:]*:\s*{_IPV4}")
         if dhcp:
             current.dhcp_server = dhcp
 
@@ -200,7 +218,7 @@ def get_primary_adapter() -> Optional[AdapterInfo]:
     return real[0]
 
 
-# ── Ping helper ───────────────────────────────────────────────────────────────
+# Ping helper
 
 def _ping(target: str, count: int = PING_COUNT) -> PingResult:
     result = PingResult(target=target, sent=count)
@@ -209,17 +227,19 @@ def _ping(target: str, count: int = PING_COUNT) -> PingResult:
         timeout=count * 4,
     )
 
-    # Parse loss
+    # Only replies carrying a TTL are real echo replies. Windows also counts
+    # "Destination host unreachable" messages as received, which would make a
+    # dead router look reachable.
+    real_replies = len(re.findall(r"\bTTL=\d+", stdout, re.IGNORECASE))
+
     loss_m = re.search(r"Lost\s*=\s*(\d+)\s*\((\d+)%", stdout, re.IGNORECASE)
     if loss_m:
-        lost    = int(loss_m.group(1))
-        result.loss_pct   = float(loss_m.group(2))
-        result.received   = count - lost
-        result.reachable  = result.received > 0
+        lost = int(loss_m.group(1))
+        result.received = min(count - lost, real_replies)
     elif rc == 0:
-        result.reachable  = True
-        result.received   = count
-        result.loss_pct   = 0.0
+        result.received = min(count, real_replies)
+    result.loss_pct  = round(100.0 * (count - result.received) / count, 1) if count else 100.0
+    result.reachable = result.received > 0
 
     # Parse latency
     lat_m = re.search(
@@ -240,7 +260,7 @@ def _ping(target: str, count: int = PING_COUNT) -> PingResult:
     return result
 
 
-# ── Individual tests ──────────────────────────────────────────────────────────
+# Individual tests
 
 def test_loopback() -> bool:
     """Test 1 — Windows TCP/IP stack via 127.0.0.1."""
@@ -285,7 +305,7 @@ def test_dns() -> tuple[bool, float]:
         return False, 0.0
 
 
-# ── Master runner ─────────────────────────────────────────────────────────────
+# Master runner
 
 def run_all_diagnostics() -> DiagnosticReport:
     """
@@ -294,19 +314,19 @@ def run_all_diagnostics() -> DiagnosticReport:
     """
     report = DiagnosticReport()
 
-    # ── Adapter discovery ──────────────────────────────────────────────────
+    # Adapter discovery
     report.adapter = get_primary_adapter()
     if report.adapter:
         report.apipa_detected = report.adapter.is_apipa
         report.no_gateway     = not report.adapter.gateway
 
-    # ── Test 1: Loopback ──────────────────────────────────────────────────
+    # Test 1: Loopback
     report.loopback_ok = test_loopback()
     if not report.loopback_ok:
         log_debug("Loopback failed — skipping remaining tests.")
         return report  # Stack is broken; nothing else will work
 
-    # ── Test 2: Gateway ───────────────────────────────────────────────────
+    # Test 2: Gateway
     if report.adapter and report.adapter.gateway:
         report.gateway_ping = test_gateway(report.adapter.gateway)
         report.has_local_connectivity = report.gateway_ping.reachable
@@ -314,15 +334,15 @@ def run_all_diagnostics() -> DiagnosticReport:
         log_debug("No gateway found — skipping gateway ping.")
         report.has_local_connectivity = False
 
-    # ── Test 3: Internet ──────────────────────────────────────────────────
+    # Test 3: Internet
     report.internet_ping = test_internet()
     report.has_internet  = report.internet_ping.reachable
 
-    # ── Test 4: DNS ───────────────────────────────────────────────────────
+    # Test 4: DNS
     report.dns_ok, report.dns_latency_ms = test_dns()
     report.has_dns = report.dns_ok
 
-    # ── Derived quality flags ─────────────────────────────────────────────
+    # Derived quality flags
     ref = report.internet_ping if report.has_internet else report.gateway_ping
     if ref:
         report.packet_loss_severe   = ref.loss_pct >= PACKET_LOSS_BAD_PCT

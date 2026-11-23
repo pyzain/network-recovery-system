@@ -21,7 +21,7 @@ class RemediationResult:
     user_message: str            = ""
 
 
-# ── User-facing messages by fault ────────────────────────────────────────────
+# User-facing messages by fault
 
 USER_MESSAGES: dict[str, str] = {
     Fault.STACK_FAILURE: (
@@ -94,7 +94,7 @@ def _attempt(label: str, fn, result: RemediationResult) -> bool:
         return False
 
 
-# ── Remediation plans by fault ────────────────────────────────────────────────
+# Remediation plans by fault
 
 def remediate(cls: Classification) -> RemediationResult:
     result   = RemediationResult()
@@ -121,17 +121,13 @@ def remediate(cls: Classification) -> RemediationResult:
         f"adapter='{adapter_name}'  gateway='{gateway_ip}'  ssid='{ssid}'"
     )
 
-    # ─────────────────────────────────────────────────────────────────────
-    # STACK FAILURE — Winsock reset + reboot recommendation
-    # ─────────────────────────────────────────────────────────────────────
+    # ---- STACK FAILURE — Winsock reset + reboot recommendation ----
     if fault == Fault.STACK_FAILURE:
         _attempt("DNS flush",     flush_dns,     result)
         _attempt("Winsock reset", reset_winsock, result)
         result.reboot_recommended = True
 
-    # ─────────────────────────────────────────────────────────────────────
-    # ADAPTER HANG — reset the adapter
-    # ─────────────────────────────────────────────────────────────────────
+    # ---- ADAPTER HANG — reset the adapter ----
     elif fault == Fault.ADAPTER_HANG:
         _attempt("DNS flush", flush_dns, result)
         if adapter_name:
@@ -143,9 +139,7 @@ def remediate(cls: Classification) -> RemediationResult:
         else:
             log_debug("  Cannot reset adapter — name not discovered.")
 
-    # ─────────────────────────────────────────────────────────────────────
-    # APIPA / DHCP failure
-    # ─────────────────────────────────────────────────────────────────────
+    # ---- APIPA / DHCP failure ----
     elif fault == Fault.APIPA_DHCP_FAILURE:
         _attempt("DNS flush", flush_dns, result)
         _attempt("TCP optimization", optimize_tcp, result)
@@ -155,9 +149,7 @@ def remediate(cls: Classification) -> RemediationResult:
             result,
         )
 
-    # ─────────────────────────────────────────────────────────────────────
-    # GATEWAY unreachable
-    # ─────────────────────────────────────────────────────────────────────
+    # ---- GATEWAY unreachable ----
     elif fault == Fault.GATEWAY_UNREACHABLE:
         _attempt("DNS flush", flush_dns, result)
         _attempt("TCP optimization", optimize_tcp, result)
@@ -175,17 +167,13 @@ def remediate(cls: Classification) -> RemediationResult:
             )
         _attempt("Remove stale default routes", remove_stale_default_routes, result)
 
-    # ─────────────────────────────────────────────────────────────────────
-    # ISP / upstream failure — optimize locally, don't hammer network
-    # ─────────────────────────────────────────────────────────────────────
+    # ---- ISP / upstream failure — optimize locally, don't hammer network ----
     elif fault == Fault.ISP_UPSTREAM_FAILURE:
         _attempt("DNS flush",       flush_dns,       result)
         _attempt("TCP optimization", optimize_tcp,   result)
         # No DHCP renewal, no adapter reset — local path is fine
 
-    # ─────────────────────────────────────────────────────────────────────
-    # DNS failure
-    # ─────────────────────────────────────────────────────────────────────
+    # ---- DNS failure ----
     elif fault == Fault.DNS_FAILURE:
         _attempt("DNS flush",        flush_dns,     result)
         _attempt("TCP optimization", optimize_tcp,  result)
@@ -197,9 +185,7 @@ def remediate(cls: Classification) -> RemediationResult:
                 result,
             )
 
-    # ─────────────────────────────────────────────────────────────────────
-    # Weak Wi-Fi signal — reconnect may help with AP selection
-    # ─────────────────────────────────────────────────────────────────────
+    # ---- Weak Wi-Fi signal — reconnect may help with AP selection ----
     elif fault == Fault.WIFI_WEAK_SIGNAL:
         _attempt("DNS flush", flush_dns, result)
         _attempt("TCP optimization", optimize_tcp, result)
@@ -210,30 +196,22 @@ def remediate(cls: Classification) -> RemediationResult:
                 result,
             )
 
-    # ─────────────────────────────────────────────────────────────────────
-    # 2.4 GHz congestion — light optimization, user advisory
-    # ─────────────────────────────────────────────────────────────────────
+    # ---- 2.4 GHz congestion — light optimization, user advisory ----
     elif fault == Fault.WIFI_24GHZ_CONGESTION:
         _attempt("DNS flush",        flush_dns,    result)
         _attempt("TCP optimization", optimize_tcp, result)
 
-    # ─────────────────────────────────────────────────────────────────────
-    # High packet loss / high latency / partial internet
-    # ─────────────────────────────────────────────────────────────────────
+    # ---- High packet loss / high latency / partial internet ----
     elif fault in (Fault.HIGH_PACKET_LOSS, Fault.HIGH_LATENCY, Fault.PARTIAL_INTERNET):
         _attempt("DNS flush",        flush_dns,    result)
         _attempt("TCP optimization", optimize_tcp, result)
 
-    # ─────────────────────────────────────────────────────────────────────
-    # Healthy — still do light maintenance
-    # ─────────────────────────────────────────────────────────────────────
+    # ---- Healthy — still do light maintenance ----
     elif fault in (Fault.HEALTHY, Fault.MINOR_OPTIMIZABLE):
         _attempt("DNS flush",        flush_dns,    result)
         _attempt("TCP optimization", optimize_tcp, result)
 
-    # ─────────────────────────────────────────────────────────────────────
-    # Build user message
-    # ─────────────────────────────────────────────────────────────────────
+    # ---- Build user message ----
     base_msg = USER_MESSAGES.get(fault, "Connection refreshed.")
 
     if result.reboot_recommended:

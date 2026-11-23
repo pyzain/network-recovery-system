@@ -9,7 +9,7 @@ import platform
 import datetime
 from config import TIMESTAMP_FORMAT
 
-# ── Internal debug flag (set by run_script.py) ────────────────────────────────
+# Internal debug flag (set by run_script.py)
 _debug_mode: bool = False
 
 
@@ -22,7 +22,7 @@ def is_debug() -> bool:
     return _debug_mode
 
 
-# ── Logging ───────────────────────────────────────────────────────────────────
+# Logging
 
 def log_debug(msg: str) -> None:
     """Print only when --debug is active."""
@@ -43,7 +43,7 @@ def log_section(title: str) -> None:
         print(f"{'─'*60}")
 
 
-# ── Subprocess helper ─────────────────────────────────────────────────────────
+# Subprocess helper
 
 def run_cmd(args: list[str], timeout: int = 15) -> tuple[int, str, str]:
     """
@@ -71,7 +71,7 @@ def run_cmd(args: list[str], timeout: int = 15) -> tuple[int, str, str]:
         return -3, "", str(e)
 
 
-# ── Platform / privilege ──────────────────────────────────────────────────────
+# Platform / privilege
 
 def is_windows() -> bool:
     return platform.system() == "Windows"

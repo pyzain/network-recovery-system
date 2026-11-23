@@ -10,7 +10,7 @@ from helpers import run_cmd, log_debug, is_admin
 from config import ADAPTER_RESET_WAIT_S, WIFI_RECONNECT_WAIT_S, MAX_DHCP_ATTEMPTS
 
 
-# ── Adapter enable / disable ──────────────────────────────────────────────────
+# Adapter enable / disable
 
 def reset_adapter(adapter_name: str) -> bool:
     """
@@ -44,7 +44,7 @@ def reset_adapter(adapter_name: str) -> bool:
     return success
 
 
-# ── DHCP renewal ──────────────────────────────────────────────────────────────
+# DHCP renewal
 
 def renew_dhcp(adapter_name: str = "") -> bool:
     """
@@ -70,7 +70,7 @@ def renew_dhcp(adapter_name: str = "") -> bool:
     return success
 
 
-# ── Wi-Fi reconnect ───────────────────────────────────────────────────────────
+# Wi-Fi reconnect
 
 def reconnect_wifi(adapter_name: str, ssid: str) -> bool:
     """
@@ -100,7 +100,7 @@ def reconnect_wifi(adapter_name: str, ssid: str) -> bool:
     return success
 
 
-# ── Route table cleanup ───────────────────────────────────────────────────────
+# Route table cleanup
 
 def remove_stale_default_routes() -> bool:
     """
@@ -117,25 +117,30 @@ def remove_stale_default_routes() -> bool:
     if rc != 0:
         return False
 
-    # Count default route entries
-    defaults = [
-        line for line in stdout.splitlines()
-        if line.strip().startswith("0.0.0.0")
-    ]
+    # Only the "Active Routes" section; persistent routes have a different layout.
+    active = stdout.split("Persistent Routes")[0]
+
+    # Each entry: destination, netmask, gateway, interface, metric
+    defaults: list[tuple[int, str]] = []
+    for line in active.splitlines():
+        parts = line.split()
+        if (len(parts) == 5 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0"
+                and parts[2] != "On-link" and parts[4].isdigit()):
+            defaults.append((int(parts[4]), parts[2]))
     log_debug(f"  Found {len(defaults)} default route(s).")
 
     if len(defaults) <= 1:
         log_debug("  No duplicate default routes — cleanup skipped.")
         return True
 
-    # Remove all, then the OS will re-establish via DHCP or existing adapter
-    log_debug(f"  Removing {len(defaults) - 1} duplicate default route(s).")
-    for entry in defaults[1:]:  # keep the first (lowest metric), remove extras
-        parts = entry.split()
-        if len(parts) >= 3:
-            gateway = parts[2]
-            log_debug(f"    route delete 0.0.0.0 mask 0.0.0.0 {gateway}")
-            run_cmd(["route", "delete", "0.0.0.0", "mask", "0.0.0.0", gateway],
-                    timeout=5)
+    # Windows prefers the lowest metric, so that is the route to keep.
+    defaults.sort()
+    kept_metric, kept_gw = defaults[0]
+    log_debug(f"  Keeping {kept_gw} (metric {kept_metric}); "
+              f"removing {len(defaults) - 1} other default route(s).")
+    for _metric, gateway in defaults[1:]:
+        log_debug(f"    route delete 0.0.0.0 mask 0.0.0.0 {gateway}")
+        run_cmd(["route", "delete", "0.0.0.0", "mask", "0.0.0.0", gateway],
+                timeout=5)
 
     return True

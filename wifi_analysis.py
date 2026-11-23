@@ -30,7 +30,7 @@ class WifiInfo:
     hosted_network: str = ""
     raw_lines: list[str] = field(default_factory=list)
 
-    # ── Derived assessments ───────────────────────────────────────────────────
+    # Derived assessments
     @property
     def is_connected(self) -> bool:
         return self.state.lower() == "connected"
